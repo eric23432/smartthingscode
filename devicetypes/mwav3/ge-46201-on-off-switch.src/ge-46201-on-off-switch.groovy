@@ -1,5 +1,5 @@
 /**
- *  GE/Jasco Z-Wave Plus On/Off Switch
+ *  GE/Jasco Z-Wave Plus On/Off Switch 46201 or 46562
  * 
  *  Contains code from https://github.com/nuttytree/Nutty-SmartThings/blob/master/devicetypes/nuttytree/ge-jasco-zwave-plus-on-off-switch.src/ge-jasco-zwave-plus-on-off-switch.groovy
  *
@@ -18,26 +18,27 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  *	Author: Tim Grimley
- *	Date: 08/31/2020
+ *	Date: 12/03/2020
  *
  *	Changelog:
  *
- *  0.13 (12/02/2020) - Changed button values to support automations view in new app (see mapping note below)
- *  0.12 (09/23/2020) - Support added for double tap and hold, added code to make sure button values updated 
- *  0.11 (08/31/2020) - Initial Release Updated to Work with New Smartthings App
+ *  0.11 (08/31/2020) - Initial Release 
  *  
  *
- *   Button Mappings  NOTE - THIS IS A BREAKING CHANGE from prior versions and uses a single button.  
- *                    ALL prior automations will need to be re-programmed or updated when updating this DTH from old versions:
+ *   Button Mappings  NOTE - THIS IS A BREAKING CHANGE from any other DTH and uses a single button.  
+ *                    ALL prior automations will need to be re-programmed or updated when updating this DTH from other versions:
  *
  *   ACTION             BUTTON#    BUTTON ACTION
+ *   Single-Tap Up        1        up
+ *   Single-Tap Down      1        down  
  *   Double-Tap Up        1        up_2x
  *   Double-Tap Down      1        down_2x  
- *   Double-Tap Up Hold   1        up_3x
- *   Double-Tap Down Hold 1        down_3x
- *   Double-Tap Release   1        down_4x
+ *   Triple-Tap Up        1        up_3x
+ *   Triple-Tap Down      1        down_3x
+ *   Hold Up              1        up_hold
+ *   Hold Down            1        down_hold
+ *   Release Hold	      1        holdrelease
  * 
- *   Note - For double tap hold, tap twice and keep pressed up or down after second tap
  *   If options do not change, go to preferences and toggle "force settings update/refresh"
  */
 
@@ -45,7 +46,7 @@ import groovy.transform.Field
 import groovy.json.JsonOutput
 
 metadata {
-	definition (name: "GE Jasco Z-Wave Plus On Off Switch", namespace: "mwav3", author: "Tim Grimley") {
+	definition (name: "GE 46201 On Off Switch", namespace: "mwav3", author: "Tim Grimley") {
 		capability "Actuator"
 		capability "Button"
 		capability "Configuration"
@@ -55,21 +56,12 @@ metadata {
 		capability "Sensor"
 		capability "Switch"
 
-		attribute "inverted", "enum", ["inverted", "not inverted"]
-        
-        command "doubleUp"
-        command "doubleDown"
         command "inverted"
         command "notInverted"
         
         // These include version because there are older firmwares that don't support double-tap or the extra association groups
-		fingerprint mfr:"0063", prod:"4952", model: "3036", ver: "5.20", deviceJoinName: "GE Z-Wave Plus Wall Switch"
-		fingerprint mfr:"0063", prod:"4952", model: "3036", ver: "5.22", deviceJoinName: "GE Z-Wave Plus Wall Switch"
-		fingerprint mfr:"0063", prod:"4952", model: "3037", ver: "5.20", deviceJoinName: "GE Z-Wave Plus Toggle Switch"
-		fingerprint mfr:"0063", prod:"4952", model: "3038", ver: "5.20", deviceJoinName: "GE Z-Wave Plus Toggle Switch"
-		fingerprint mfr:"0063", prod:"4952", model: "3130", ver: "5.20", deviceJoinName: "Jasco Z-Wave Plus Wall Switch"
-		fingerprint mfr:"0063", prod:"4952", model: "3131", ver: "5.20", deviceJoinName: "Jasco Z-Wave Plus Toggle Switch"
-		fingerprint mfr:"0063", prod:"4952", model: "3132", ver: "5.20", deviceJoinName: "Jasco Z-Wave Plus Toggle Switch"
+		fingerprint mfr:"0063", prod:"4952", model: "3137", ver: "5.53", deviceJoinName: "Jasco Z-Wave Plus Toggle Switch"
+		fingerprint mfr:"0063", prod:"4952", model: "3135", ver: "5.53", deviceJoinName: "Jasco Z-Wave Plus Wall Switch"
 	}
 
 	simulator {
@@ -83,8 +75,8 @@ metadata {
     
     preferences {
         
-        input "ledIndicator", "enum", title: "LED Indicator", description: "Turn LED indicator... ", required: false, options:["on": "When On", "off": "When Off", "never": "Never"], defaultValue: "off"
-        input "invertSwitch", "bool", title: "Invert Switch", description: "Invert switch? ", required: false
+        input "ledIndicator", "enum", title: "LED Indicator", description: "Turn LED indicator... ", required: false, options:["on": "When Switch On", "off": "When Switch Off", "never": "Never On", "always": "Always On"], defaultValue: "off"
+        input "altexclusion", "bool", title: "Prevent Accidental Exclusion", description: "Prevent accidental exclusion? ", required: false
         input "forceupdate", "bool", title: "Force Settings Update/Refresh?", description: "Toggle to force settings update", required: false
         
         input (
@@ -121,31 +113,18 @@ metadata {
 			}
 		}
         
-        standardTile("doubleUp", "device.button", width: 3, height: 2, decoration: "flat") {
-			state "default", label: "Tap ▲▲", backgroundColor: "#ffffff", action: "doubleUp", icon: "https://raw.githubusercontent.com/nuttytree/Nutty-SmartThings/master/devicetypes/nuttytree/SwitchOnIcon.png"
-		}     
- 
-        standardTile("doubleDown", "device.button", width: 3, height: 2, decoration: "flat") {
-			state "default", label: "Tap ▼▼", backgroundColor: "#ffffff", action: "doubleDown", icon: "https://raw.githubusercontent.com/nuttytree/Nutty-SmartThings/master/devicetypes/nuttytree/SwitchOffIcon.png"
-		} 
-
 		standardTile("indicator", "device.indicatorStatus", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
 			state "when off", action:"indicator.indicatorWhenOn", icon:"st.indicators.lit-when-off"
 			state "when on", action:"indicator.indicatorNever", icon:"st.indicators.lit-when-on"
 			state "never", action:"indicator.indicatorWhenOff", icon:"st.indicators.never-lit"
 		}
         
-		standardTile("inverted", "device.inverted", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-			state "not inverted", label: "Not Inverted", action:"inverted", icon:"https://raw.githubusercontent.com/nuttytree/Nutty-SmartThings/master/devicetypes/nuttytree/SwitchNotInverted.png", backgroundColor: "#ffffff"
-			state "inverted", label: "Inverted", action:"notInverted", icon:"https://raw.githubusercontent.com/nuttytree/Nutty-SmartThings/master/devicetypes/nuttytree/SwitchInverted.png", backgroundColor: "#ffffff"
-		}
-
 		standardTile("refresh", "device.switch", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
 			state "default", label:'', action:"refresh.refresh", icon:"st.secondary.refresh"
 		}
 
 		main(["switch"])
-        details(["switch", "doubleUp", "doubleDown", "indicator", "inverted", "refresh"])
+        details(["switch", "indicator", "refresh"])
 	}
 }
 
@@ -162,7 +141,7 @@ def parse(String description) {
     }
     
     if (!device.currentValue("supportedButtonValues")) {
-        sendEvent(name: "supportedButtonValues", value:JsonOutput.toJson(["up_2x","down_2x","up_3x","down_3x","down_4x"]), displayed:false)
+        sendEvent(name: "supportedButtonValues", value:JsonOutput.toJson(["up","down","up_hold","down_hold","up_2x","down_2x","up_3x","down_3x"]), displayed:false)
     }
     
     result    
@@ -183,44 +162,79 @@ def zwaveEvent(physicalgraph.zwave.commands.basicv1.BasicReport cmd) {
 	createEvent(name: "switch", value: cmd.value ? "on" : "off", type: "physical")
 }
 
-def zwaveEvent(physicalgraph.zwave.commands.basicv1.BasicSet cmd) {
-    log.debug "---Double Tap--- ${device.displayName} sent ${cmd}"
-	if (cmd.value == 255) {
-    	createEvent(name: "button", value: "up_2x", data: [buttonNumber: 1], descriptionText: "Double-tap up (up_2x) on $device.displayName", isStateChange: true, type: "physical")
+def zwaveEvent(physicalgraph.zwave.commands.centralscenev1.CentralSceneNotification cmd) {
+    
+    log.debug "---Central Scene Command--- ${device.displayName} sent ${cmd}"
+    def upordown = []
+    
+    // scene number is 1 for up 2 for down
+    upordown = (cmd.sceneNumber) as Integer
+
+  // single taps
+     if(cmd.keyAttributes == 0){
+    	if(upordown == 1) {
+        
+    	createEvent(name: "button", value: "up", data: [buttonNumber: 1], descriptionText: "$device.displayName button up was single tapped", isStateChange: true)
+    	}
+    	else if(upordown == 2) {
+        
+        createEvent(name: "button", value: "down", data: [buttonNumber: 1], descriptionText: "$device.displayName button down was single tapped", isStateChange: true)
+    	}     
+      }   
+      
+  // button release
+     else if(cmd.keyAttributes == 1){
+    	createEvent(name: "button", value: "holdRelease", data: [buttonNumber: 1], descriptionText: "$device.displayName button was released", isStateChange: true)    
+      }  
+
+  // single tap hold
+    else if(cmd.keyAttributes == 2){
+  		if(upordown == 1) {
+        
+    	createEvent(name: "button", value: "up_hold", data: [buttonNumber: 1], descriptionText: "$device.displayName button up was held", isStateChange: true)
+    	}
+        
+    	else if(upordown == 2) {
+        
+        createEvent(name: "button", value: "down_hold", data: [buttonNumber: 1], descriptionText: "$device.displayName button down was held", isStateChange: true)
+    	} 
+      }
+    
+
+    // double taps
+    else if(cmd.keyAttributes == 3){
+    
+    	if(upordown == 1) {
+        
+    	createEvent(name: "button", value: "up_2x", data: [buttonNumber: 1], descriptionText: "$device.displayName button up was double tapped", isStateChange: true)
+    	}
+    	else if(upordown == 2) {
+        
+        createEvent(name: "button", value: "down_2x", data: [buttonNumber: 1], descriptionText: "$device.displayName button down was double tapped", isStateChange: true)
+    	}
     }
-	else if (cmd.value == 0) {
-    	createEvent(name: "button", value: "down_2x", data: [buttonNumber: 1], descriptionText: "Double-tap down (down_2x) on $device.displayName", isStateChange: true, type: "physical")
+    
+    // triple taps 
+    else if(cmd.keyAttributes == 4){
+    	if(upordown == 1) {
+        
+    	createEvent(name: "button", value: "up_3x", data: [buttonNumber: 1], descriptionText: "$device.displayName button up was triple tapped", isStateChange: true)
+    	}
+    	else if(upordown == 2) {
+        
+        createEvent(name: "button", value: "down_3x", data: [buttonNumber: 1], descriptionText: "$device.displayName button down was triple tapped", isStateChange: true)
+    	}  
+     }
+   
+    else {
+    log.warn "${device.displayName} received unhandled command: ${cmd}"
     }
+ 
 }
 
-def zwaveEvent(physicalgraph.zwave.commands.switchmultilevelv3.SwitchMultilevelStartLevelChange cmd) {
-	 log.debug "---Double Tap and Hold--- ${device.displayName} sent ${cmd}"
-	if (cmd.startLevel == 0) {
-    	createEvent(name: "button", value: "up_3x", data: [buttonNumber: 1], descriptionText: "Double-tap up and hold (up_3x) on $device.displayName", isStateChange: true, type: "physical")    
-        }
-	else if (cmd.startLevel == 255) {
-    	createEvent(name: "button", value: "down_3x", data: [buttonNumber: 1], descriptionText: "Double-tap down and hold (down_3x) on $device.displayName", isStateChange: true, type: "physical")
-    }
- }
- 
-def zwaveEvent(physicalgraph.zwave.commands.switchmultilevelv3.SwitchMultilevelStopLevelChange cmd) {
-	log.debug "---Double Tap and Release--- ${device.displayName} sent ${cmd}"
-	createEvent(name: "button", value: "down_4x", data: [buttonNumber: 1], descriptionText: "Double-tap Release (down_4x) on $device.displayName", isStateChange: true, type: "physical")    
-}
 
 def zwaveEvent(physicalgraph.zwave.commands.associationv2.AssociationReport cmd) {
 	log.debug "---ASSOCIATION REPORT V2--- ${device.displayName} sent groupingIdentifier: ${cmd.groupingIdentifier} maxNodesSupported: ${cmd.maxNodesSupported} nodeId: ${cmd.nodeId} reportsToFollow: ${cmd.reportsToFollow}"
-    if (cmd.groupingIdentifier == 3) {
-    	if (cmd.nodeId.contains(zwaveHubNodeId)) {
-        	createEvent(name: "numberOfButtons", value: 1, displayed: false)
-            sendEvent(name: "supportedButtonValues", value:JsonOutput.toJson(["up_2x","down_2x","up_3x","down_3x","down_4x"]), displayed:false)
-        }
-        else {
-			sendHubCommand(new physicalgraph.device.HubAction(zwave.associationV2.associationSet(groupingIdentifier: 3, nodeId: zwaveHubNodeId).format()))
-			sendHubCommand(new physicalgraph.device.HubAction(zwave.associationV2.associationGet(groupingIdentifier: 3).format()))
-        	createEvent(name: "numberOfButtons", value: 0, displayed: false)
-        }
-    }
 }
 
 def zwaveEvent(physicalgraph.zwave.commands.configurationv2.ConfigurationReport cmd) {
@@ -231,10 +245,10 @@ def zwaveEvent(physicalgraph.zwave.commands.configurationv2.ConfigurationReport 
     switch (cmd.parameterNumber) {
         case 3:
             name = "indicatorStatus"
-            value = reportValue == 1 ? "when on" : reportValue == 2 ? "never" : "when off"
+            value = reportValue == 1 ? "when on"  : reportValue == 2 ? "never" : reportValue == 3 ? "always" : "when off"
             break
-        case 4:
-            name = "inverted"
+        case 19:
+            name = "altexclusion"
             value = reportValue == 1 ? "true" : "false"
             break
         default:
@@ -276,12 +290,8 @@ def configure() {
     def cmds = []
     // Get current config parameter values
     cmds << zwave.configurationV2.configurationGet(parameterNumber: 3).format()
-    cmds << zwave.configurationV2.configurationGet(parameterNumber: 4).format()
-    
-    // Add the hub to association group 3 to get double-tap notifications
-    cmds << zwave.associationV2.associationSet(groupingIdentifier: 3, nodeId: zwaveHubNodeId).format()
-    cmds << zwave.associationV2.associationGet(groupingIdentifier: 3).format()
-    
+    cmds << zwave.configurationV2.configurationGet(parameterNumber: 19).format()
+       
     delayBetween(cmds,500)
 }
 
@@ -291,7 +301,8 @@ def updated() {
 
 	def nodes = []
     def cmds = []
-
+    
+          
 	if (settings.requestedGroup2 != state.currentGroup2) {
         nodes = parseAssocGroupList(settings.requestedGroup2, 2)
         cmds << zwave.associationV2.associationRemove(groupingIdentifier: 2, nodeId: [])
@@ -307,7 +318,7 @@ def updated() {
         cmds << zwave.associationV2.associationGet(groupingIdentifier: 3)
         state.currentGroup3 = settings.requestedGroup3
     }
-    
+  
     switch (ledIndicator) {
 		case "on":
 			indicatorWhenOn()
@@ -318,62 +329,65 @@ def updated() {
 		case "never":
 			indicatorNever()
 			break
+        case "always":
+			indicatorAlways()
+			break
 		default:
 			indicatorWhenOff()
 			break
-	}
-    
-    switch (invertSwitch) {
+	}    
+ 
+ switch (altexclusion) {
     	case "false":
-        	notInverted()
+        	allowAccexclusion()
             break
         case "true":
-        	inverted()
+        	preventAccexclusion()
             break
         default:
-        	notInverted()
-	}      
+        	allowAccexclusion()
+	    break
+	}   
+    
+  
+	sendEvent(name: "numberOfButtons", value: 1, displayed: false)
+    sendEvent(name: "supportedButtonValues", value:JsonOutput.toJson(["up","down","up_hold","down_hold","up_2x","down_2x","up_3x","down_3x"]), displayed:false)
+  
 	
 	sendHubCommand(cmds.collect{ new physicalgraph.device.HubAction(it.format()) }, 500)
-    
-    sendEvent(name: "numberOfButtons", value: 1, displayed: false)
-    sendEvent(name: "supportedButtonValues", value:JsonOutput.toJson(["up_2x","down_2x","up_3x","down_3x","down_4x"]), displayed:false) 
-    
-    log.debug "---Preferences Updated--- ${device.displayName} sent ${cmds}"
+   
+   log.debug "---Preferences Updated--- ${device.displayName} sent ${cmds}"
 }
 
 void indicatorWhenOn() {
-	sendEvent(name: "indicatorStatus", value: "when on", display: false)
-	sendHubCommand(new physicalgraph.device.HubAction(zwave.configurationV2.configurationSet(configurationValue: [1], parameterNumber: 3, size: 1).format()))
+	sendEvent(name: "indicatorStatus", value: "when on", displayed: false)
+	sendHubCommand(new physicalgraph.device.HubAction(zwave.configurationV1.configurationSet(configurationValue: [1], parameterNumber: 3, size: 1).format()))
 }
 
 void indicatorWhenOff() {
-	sendEvent(name: "indicatorStatus", value: "when off", display: false)
-	sendHubCommand(new physicalgraph.device.HubAction(zwave.configurationV2.configurationSet(configurationValue: [0], parameterNumber: 3, size: 1).format()))
+	sendEvent(name: "indicatorStatus", value: "when off", displayed: false)
+	sendHubCommand(new physicalgraph.device.HubAction(zwave.configurationV1.configurationSet(configurationValue: [0], parameterNumber: 3, size: 1).format()))
 }
 
 void indicatorNever() {
-	sendEvent(name: "indicatorStatus", value: "never", display: false)
-	sendHubCommand(new physicalgraph.device.HubAction(zwave.configurationV2.configurationSet(configurationValue: [2], parameterNumber: 3, size: 1).format()))
+	sendEvent(name: "indicatorStatus", value: "never", displayed: false)
+	sendHubCommand(new physicalgraph.device.HubAction(zwave.configurationV1.configurationSet(configurationValue: [2], parameterNumber: 3, size: 1).format()))
 }
 
-void inverted() {
-	sendEvent(name: "inverted", value: "inverted", display: false)
-	sendHubCommand(new physicalgraph.device.HubAction(zwave.configurationV2.configurationSet(configurationValue: [1], parameterNumber: 4, size: 1).format()))
+void indicatorAlways() {
+	sendEvent(name: "indicatorStatus", value: "always", displayed: false)
+	sendHubCommand(new physicalgraph.device.HubAction(zwave.configurationV1.configurationSet(configurationValue: [3], parameterNumber: 3, size: 1).format()))
 }
 
-void notInverted() {
-	sendEvent(name: "inverted", value: "not inverted", display: false)
-	sendHubCommand(new physicalgraph.device.HubAction(zwave.configurationV2.configurationSet(configurationValue: [0], parameterNumber: 4, size: 1).format()))
-}
+void allowAccexclusion() {
+ 	sendEvent(name: "allowaltexclusion", value: "normalexc", display: false)
+    sendHubCommand(new physicalgraph.device.HubAction(zwave.configurationV2.configurationSet(configurationValue: [0], parameterNumber: 19, size: 1).format()))
+ }
 
-def doubleUp() {
-	sendEvent(name: "button", value: "up_2x", data: [buttonNumber: 1], descriptionText: "Double-tap up (up_2x) on $device.displayName", isStateChange: true, type: "digital")
-}
-
-def doubleDown() {
-	sendEvent(name: "button", value: "down_2x", data: [buttonNumber: 1], descriptionText: "Double-tap down (down_2x) on $device.displayName", isStateChange: true, type: "digital")
-}
+ void preventAccexclusion() {
+	sendEvent(name: "allowaltexclusion", value: "extrapress", display: false)
+    sendHubCommand(new physicalgraph.device.HubAction(zwave.configurationV2.configurationSet(configurationValue: [1], parameterNumber: 19, size: 1).format()))
+ }
 
 def poll() {
 	def cmds = []
@@ -413,7 +427,8 @@ def off() {
 
 def initialize() {
 	sendEvent(name: "numberOfButtons", value: 1, displayed: false)
-    sendEvent(name: "supportedButtonValues", value:JsonOutput.toJson(["up_2x","down_2x","up_3x","down_3x","down_4x"]), displayed:false) 
+    sendEvent(name: "supportedButtonValues", value:JsonOutput.toJson(["up","down","up_hold","down_hold","up_2x","down_2x","up_3x","down_3x"]), displayed:false)
+  
       
 }
 
@@ -421,10 +436,10 @@ def initialize() {
 // Private Methods
 
 private parseAssocGroupList(list, group) {
-    def nodes = group == 2 ? [] : [zwaveHubNodeId]
+   def nodes = []
     if (list) {
         def nodeList = list.split(',')
-        def max = group == 2 ? 5 : 4
+        def max = 5
         def count = 0
 
         nodeList.each { node ->
@@ -435,7 +450,7 @@ private parseAssocGroupList(list, group) {
             else if (node.matches("\\p{XDigit}+")) {
                 def nodeId = Integer.parseInt(node,16)
                 if (nodeId == zwaveHubNodeId) {
-                	log.warn "Association Group ${group}: Adding the hub as an association is not allowed (it would break double-tap)."
+                	log.warn "Association Group ${group}: Adding the hub as an association is not allowed (it would conflict with scene control)."
                 }
                 else if ( (nodeId > 0) & (nodeId < 256) ) {
                     nodes << nodeId
